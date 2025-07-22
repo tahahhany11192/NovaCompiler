@@ -1,0 +1,497 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<link rel="icon" type="image/jpg" href="logo2.jpg">
+  <meta charset="UTF-8">
+  <title>Pseudocode Compiler</title>
+  <style>
+    body {
+      font-family: 'Segoe UI', sans-serif;
+      background: linear-gradient(135deg, #1a2980, #26d0ce);
+      min-height: 100vh;
+      margin: 0;
+      padding: 20px;
+    }
+
+    .container {
+      max-width: 1000px;
+      margin: 40px auto;
+      background: linear-gradient(120deg, #ffffff 70%, #e0e7ff 100%);
+      padding: 30px;
+      border-radius: 18px;
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.28);
+      border: 2px solid #5d9bff;
+    }
+
+h1 {
+  font-family: 'Segoe UI', 'Montserrat', 'Arial', sans-serif;
+  font-size: 2.8rem;
+  font-weight: 900;
+  letter-spacing: 3px;
+  background: linear-gradient(90deg, #1a2980 30%, #26d0ce 100%);
+  color: transparent;
+  -webkit-background-clip: text;
+  background-clip: text;
+  text-align: center;
+  margin-bottom: 10px;
+  text-shadow: 2px 4px 12px #b3c6ff44;
+  transition: 
+    text-shadow 0.4s cubic-bezier(.4,0,.2,1),
+    transform 0.4s cubic-bezier(.4,0,.2,1),
+    filter 0.4s cubic-bezier(.4,0,.2,1);
+}
+
+h1:hover {
+  text-shadow: 2px 8px 24px #26d0ce99;
+  transform: scale(1.04) rotate(-1deg);
+  filter: brightness(1.15);
+}
+
+    .subtitle {
+      text-align: center;
+      color: #2c3e50;
+      margin-bottom: 20px;
+      font-style: italic;
+    }
+
+    textarea {
+      width: 95%;
+      height: 250px;
+      font-family: 'Fira Code', monospace;
+      font-size: 16px;
+      padding: 15px;
+      border: 2px solid #5d9bff;
+      border-radius: 10px;
+      margin-top: 10px;
+      background: #f8fbff;
+      transition: all 0.3s;
+      line-height: 1.5;
+      box-shadow: inset 0 2px 5px rgba(0, 0, 0, 0.1);
+    }
+    
+    textarea:focus {
+      border: 2px solid #ff6b6b;
+      outline: none;
+      background: #fff;
+      box-shadow: 0 0 0 3px rgba(255, 107, 107, 0.2);
+    }
+
+    .btn-group {
+      display: flex;
+      gap: 15px;
+      margin-top: 20px;
+    }
+
+    button {
+      flex: 1;
+      padding: 14px 32px;
+      background: linear-gradient(90deg, #1a2980 0%, #26d0ce 100%);
+      color: white;
+      border: none;
+      border-radius: 10px;
+      cursor: pointer;
+      font-size: 18px;
+      font-weight: bold;
+      box-shadow: 0 4px 16px rgba(26, 41, 128, 0.3);
+      transition: all 0.3s;
+      letter-spacing: 1px;
+      outline: none;
+      position: relative;
+      overflow: hidden;
+    }
+    
+    button:before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: -100%;
+      width: 100%;
+      height: 100%;
+      background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.3), transparent);
+      transition: 0.5s;
+    }
+    
+    button:hover {
+      transform: translateY(-3px);
+      box-shadow: 0 6px 24px rgba(26, 41, 128, 0.4);
+    }
+    
+    button:hover:before {
+      left: 100%;
+    }
+    
+    button:active {
+      transform: translateY(1px);
+    }
+
+    #runBtn {
+      background: linear-gradient(90deg, #00c853 0%, #1de9b6 100%);
+      box-shadow: 0 4px 16px rgba(0, 200, 83, 0.3);
+    }
+
+    #clearBtn {
+      background: linear-gradient(90deg, #ff5252 0%, #ff867c 100%);
+      box-shadow: 0 4px 16px rgba(255, 82, 82, 0.3);
+    }
+
+    .code-line {
+      padding: 10px 15px;
+      border-radius: 8px;
+      font-family: 'Fira Code', monospace;
+      display: flex;
+      align-items: center;
+      margin-bottom: 5px;
+      background: linear-gradient(90deg, #edf2ff 60%, #e3fafc 100%);
+      border-left: 5px solid #5d9bff;
+      transition: all 0.3s;
+      font-size: 15px;
+    }
+
+    .highlight {
+      background: linear-gradient(90deg, #1a2980 60%, #26d0ce 100%);
+      font-weight: bold;
+      color: #fff;
+      border-left: 5px solid #ff6b6b;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+    }
+
+    .arrow {
+      color: #1a2980;
+      font-weight: bold;
+      margin-right: 12px;
+      width: 24px;
+      display: inline-block;
+      font-size: 22px;
+      transition: all 0.3s;
+    }
+
+    .arrow.active {
+      color: #ffeb3b;
+      transform: scale(1.2);
+    }
+
+    .arrow::after {
+      content: '';
+    }
+
+    .arrow.active::after {
+      content: '➤';
+    }
+
+    .code-output, .explanation {
+      margin-top: 25px;
+      background: linear-gradient(90deg, #1e1e1e 80%, #1a2980 100%);
+      color: #fff;
+      padding: 20px;
+      border-radius: 10px;
+      font-family: 'Fira Code', monospace;
+      white-space: pre-wrap;
+      box-shadow: 0 2px 12px rgba(0, 0, 0, 0.2);
+      border: 2px solid #5d9bff;
+      min-height: 100px;
+    }
+
+    .explanation {
+      background: linear-gradient(90deg, #f8fbff 80%, #e3fafc 100%);
+      color: #2c3e50;
+      font-family: 'Segoe UI', sans-serif;
+      border: 2px solid #1de9b6;
+      box-shadow: 0 2px 12px rgba(29, 233, 182, 0.2);
+    }
+    
+    .output-title {
+      color: #26d0ce;
+      font-weight: bold;
+      margin-bottom: 10px;
+      display: flex;
+      align-items: center;
+    }
+    
+    .output-title svg {
+      margin-right: 10px;
+    }
+    
+    .success {
+      color: #1de9b6;
+    }
+    
+    .error {
+      color: #ff6b6b;
+    }
+
+    .header-logo {
+  height: 80px;
+  vertical-align: middle;
+  margin-right: 10px;
+  transition: 
+    transform 0.4s cubic-bezier(.4,0,.2,1),
+    box-shadow 0.4s cubic-bezier(.4,0,.2,1),
+    filter 0.4s cubic-bezier(.4,0,.2,1);
+  border-radius: 18px;
+  box-shadow: 0 2px 12px #1a298033;
+}
+
+.header-logo:hover {
+  transform: scale(1.07) rotate(-2deg);
+  filter: brightness(1.15);
+  box-shadow: 0 8px 32px #26d0ce55;
+}
+  </style>
+</head>
+  <div style="text-align:center; margin-bottom: 10px;">
+    <img src="logo.png" alt="Logo" style="height:200px; vertical-align:middle; margin-right:10px;" class="header-logo">
+  </div>
+<body>
+  <div class="container">
+    <h1>Pseudocode Compiler</h1>
+<label for="codeInput"><strong>Enter your pseudocode:</strong></label>
+    <textarea id="codeInput" placeholder="Example:
+SET x TO 5
+OUTPUT x"></textarea>
+    <button onclick="runStepByStep()">Run Step-by-Step</button>
+    <div id="codeDisplay" style="margin-top: 20px;"></div>
+    <div class="explanation" id="explanationBox">Explanation will appear here...</div>
+    <div class="code-output" id="outputBox">Output will appear here...</div>
+  </div>
+
+  <script>
+  async function runStepByStep() {
+    const codeArea = document.getElementById('codeInput');
+    const codeDisplay = document.getElementById('codeDisplay');
+    const outputBox = document.getElementById('outputBox');
+    const explanationBox = document.getElementById('explanationBox');
+
+    const rawLines = codeArea.value.trim().split('\n');
+    codeDisplay.innerHTML = '';
+    outputBox.textContent = '';
+    explanationBox.textContent = 'Starting execution...';
+
+    const lineElements = rawLines.map((line) => {
+      const div = document.createElement('div');
+      div.className = 'code-line';
+      const arrow = document.createElement('span');
+      arrow.className = 'arrow';
+      div.appendChild(arrow);
+      const text = document.createElement('span');
+      text.textContent = line;
+      div.appendChild(text);
+      codeDisplay.appendChild(div);
+      return { container: div, arrow, text };
+    });
+
+    let variables = {};
+    let output = '';
+
+    function replaceVars(expr) {
+      return expr;
+    }
+
+    function evalInScope(expr, variables) {
+      return Function(...Object.keys(variables), `return (${expr});`)(...Object.values(variables));
+    }
+
+    let i = 0;
+    const stack = [];
+    while (i < rawLines.length) {
+      const line = rawLines[i].trim();
+      const { container, arrow } = lineElements[i];
+
+      lineElements.forEach(el => {
+        el.container.classList.remove('highlight');
+        el.arrow.classList.remove('active');
+      });
+      container.classList.add('highlight');
+      arrow.classList.add('active');
+
+      await new Promise(resolve => setTimeout(resolve, 1300));
+
+      try {
+        if (line === '') {
+          explanationBox.textContent = 'Skipping empty line.';
+          i++;
+          continue;
+        }
+
+        if (/^SET\s+(\w+)\s+TO\s+(.+)$/i.test(line)) {
+          const [, varName, valueRaw] = line.match(/^SET\s+(\w+)\s+TO\s+(.+)$/i);
+          let val = valueRaw.trim();
+          if (/^".*"$/.test(val) && !/[+]/.test(val)) {
+            variables[varName] = val.slice(1, -1);
+          } else if (!isNaN(Number(val))) {
+            variables[varName] = Number(val);
+          } else {
+            variables[varName] = evalInScope(replaceVars(val), variables);
+          }
+          explanationBox.textContent = `Set ${varName} to ${variables[varName]}`;
+          i++;
+        }
+
+        else if (/^OUTPUT\s+(.+)$/i.test(line)) {
+          const expr = line.match(/^OUTPUT\s+(.+)$/i)[1];
+          let val = evalInScope(replaceVars(expr), variables);
+          output += val + '\n';
+          outputBox.textContent = output;
+          explanationBox.textContent = `Outputting: ${val}`;
+          i++;
+        }
+
+        
+      // IF
+      else if (/^IF\s+(.+)\s+THEN$/i.test(line)) {
+        const condition = line.match(/^IF\s+(.+)\s+THEN$/i)[1];
+        const result = evalInScope(replaceVars(condition), variables);
+        let elseIndex = -1;
+        let endIfIndex = -1;
+        let depth = 0;
+
+        for (let j = i + 1; j < rawLines.length; j++) {
+          const checkLine = rawLines[j].trim();
+          if (/^IF\s+(.+)\s+THEN$/i.test(checkLine)) depth++;
+          else if (/^END IF$/i.test(checkLine)) {
+            if (depth === 0) {
+              endIfIndex = j;
+              break;
+            } else depth--;
+          } else if (/^ELSE$/i.test(checkLine) && depth === 0) {
+            elseIndex = j;
+          }
+        }
+
+        if (endIfIndex === -1) {
+          explanationBox.textContent = "Error: Missing END IF.";
+          break;
+        }
+
+        if (result) {
+          explanationBox.textContent = "Condition is TRUE. Executing IF block.";
+          stack.push({ type: 'IF', endIf: endIfIndex });
+          i++;
+        } else {
+          explanationBox.textContent = "Condition is FALSE. Skipping IF block.";
+          i = elseIndex !== -1 ? elseIndex + 1 : endIfIndex + 1;
+        }
+        continue;
+      }
+
+      // ELSE
+      else if (/^ELSE$/i.test(line)) {
+        const last = stack[stack.length - 1];
+        if (last?.type === 'IF') {
+          i = last.endIf + 1;
+          stack.pop();
+        } else {
+          i++;
+        }
+        continue;
+      }
+
+      // END IF
+      else if (/^END IF$/i.test(line)) {
+        const last = stack[stack.length - 1];
+        if (last?.type === 'IF') stack.pop();
+        i++;
+        continue;
+      }
+
+      // FOR loop
+      else if (/^FOR\s+(\w+)\s+FROM\s+(\d+)\s+TO\s+(\d+)$/i.test(line)) {
+        const [, varName, startStr, endStr] = line.match(/^FOR\s+(\w+)\s+FROM\s+(\d+)\s+TO\s+(\d+)$/i);
+        const start = Number(startStr), end = Number(endStr);
+
+        if (start > end) {
+          let depth = 0;
+          for (let j = i + 1; j < rawLines.length; j++) {
+            const checkLine = rawLines[j].trim();
+            if (/^FOR\s+(\w+)\s+FROM\s+(\d+)\s+TO\s+(\d+)$/i.test(checkLine)) depth++;
+            else if (/^END FOR$/i.test(checkLine)) {
+              if (depth === 0) {
+                explanationBox.textContent = `Skipping FOR loop (start > end).`;
+                i = j + 1;
+                break;
+              } else depth--;
+            }
+          }
+          continue;
+        }
+
+        variables[varName] = start;
+        stack.push({ type: 'FOR', line: i, varName, end });
+        explanationBox.textContent = `Starting FOR loop: ${varName} from ${start} to ${end}`;
+        i++;
+      }
+
+      // END FOR
+      else if (/^END FOR$/i.test(line)) {
+        const loop = stack.pop();
+        if (variables[loop.varName] < loop.end) {
+          variables[loop.varName]++;
+          explanationBox.textContent = `Incrementing ${loop.varName} to ${variables[loop.varName]}`;
+          stack.push(loop);
+          i = loop.line + 1;
+        } else {
+          explanationBox.textContent = `Exiting FOR loop.`;
+          i++;
+        }
+      }
+
+      // WHILE loop
+      else if (/^WHILE\s+(.+)$/i.test(line)) {
+        const condition = line.match(/^WHILE\s+(.+)$/i)[1];
+        const result = evalInScope(replaceVars(condition), variables);
+
+        if (!result) {
+          let depth = 0;
+          for (let j = i + 1; j < rawLines.length; j++) {
+            const checkLine = rawLines[j].trim();
+            if (/^WHILE\s+(.+)$/i.test(checkLine)) depth++;
+            else if (/^END WHILE$/i.test(checkLine)) {
+              if (depth === 0) {
+                explanationBox.textContent = `Skipping WHILE loop.`;
+                i = j + 1;
+                break;
+              } else depth--;
+            }
+          }
+          continue;
+        }
+
+        stack.push({ type: 'WHILE', line: i, condition });
+        explanationBox.textContent = `Entering WHILE loop.`;
+        i++;
+      }
+
+      // END WHILE
+      else if (/^END WHILE$/i.test(line)) {
+  const loop = stack[stack.length - 1]; // peek, don't pop yet
+  const result = evalInScope(replaceVars(loop.condition), variables);
+
+  if (result) {
+    explanationBox.textContent = `Repeating WHILE loop.`;
+    i = loop.line + 1; // back to the first line inside the WHILE
+  } else {
+    explanationBox.textContent = `Exiting WHILE loop.`;
+    stack.pop(); // only pop now
+    i++;
+  }
+}
+
+
+      // Unknown
+      else {
+        explanationBox.textContent = `Unknown command: ${line}`;
+        i++;
+      }
+    } catch (err) {
+      explanationBox.textContent = `Error: ${err}`;
+      break;
+    }
+  }
+
+  explanationBox.textContent += '\n\nExecution complete.';
+}
+</script>
+  <div style="text-align:center; margin-top:40px; color:#ffffff; font-size:60px;">
+    &copy; 2025 Nova-tech. All rights reserved.
+  </div>
+</body>
+</html>
