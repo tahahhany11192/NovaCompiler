@@ -248,25 +248,50 @@ h1:hover {
     <textarea id="codeInput" placeholder="Example:
 SET x TO 5
 OUTPUT x"></textarea>
-    <button onclick="runStepByStep()">Run Step-by-Step</button>
-    <div id="codeDisplay" style="margin-top: 20px;"></div>
-    <div class="explanation" id="explanationBox">Explanation will appear here...</div>
-    <div class="code-output" id="outputBox">Output will appear here...</div>
-  </div>
+<div class="btn-group">
+  <button id="autoRunBtn" onclick="runAuto()">Run Automatically</button>
+  <button id="stepBtn" onclick="runStep()">Next Step</button>
+  <button id="clearBtn" onclick="location.reload()">Clear</button>
+</div>
+
+<div id="codeDisplay"></div>
+<div class="code-output" id="outputBox"></div>
+<div class="explanation" id="explanationBox"></div>
 
   <script>
-  async function runStepByStep() {
+  // Global variables to manage execution
+  let executionState = {
+    lineElements: [],
+    variables: {},
+    output: '',
+    currentLine: 0,
+    stack: [],
+    isRunning: false,
+    autoRunInterval: null,
+    rawLines: []
+  };
+
+  function prepareExecution() {
     const codeArea = document.getElementById('codeInput');
-    const codeDisplay = document.getElementById('codeDisplay');
-    const outputBox = document.getElementById('outputBox');
-    const explanationBox = document.getElementById('explanationBox');
-
     const rawLines = codeArea.value.trim().split('\n');
+    const codeDisplay = document.getElementById('codeDisplay');
+    
     codeDisplay.innerHTML = '';
-    outputBox.textContent = '';
-    explanationBox.textContent = 'Starting execution...';
+    document.getElementById('outputBox').textContent = '';
+    document.getElementById('explanationBox').textContent = 'Starting execution...';
 
-    const lineElements = rawLines.map((line) => {
+    executionState = {
+      lineElements: [],
+      variables: {},
+      output: '',
+      currentLine: 0,
+      stack: [],
+      isRunning: true,
+      autoRunInterval: null,
+      rawLines: rawLines
+    };
+
+    executionState.lineElements = rawLines.map((line) => {
       const div = document.createElement('div');
       div.className = 'code-line';
       const arrow = document.createElement('span');
@@ -278,74 +303,78 @@ OUTPUT x"></textarea>
       codeDisplay.appendChild(div);
       return { container: div, arrow, text };
     });
+  }
 
-    let variables = {};
-    let output = '';
+  function replaceVars(expr) {
+    return expr;
+  }
 
-    function replaceVars(expr) {
-      return expr;
+  function evalInScope(expr, variables) {
+    return Function(...Object.keys(variables), `return (${expr});`)(...Object.values(variables));
+  }
+
+  function executeNextStep() {
+    if (executionState.currentLine >= executionState.rawLines.length) {
+      executionState.isRunning = false;
+      document.getElementById('explanationBox').textContent += '\n\nExecution complete.';
+      if (executionState.autoRunInterval) {
+        clearInterval(executionState.autoRunInterval);
+        executionState.autoRunInterval = null;
+      }
+      return false;
     }
 
-    function evalInScope(expr, variables) {
-      return Function(...Object.keys(variables), `return (${expr});`)(...Object.values(variables));
-    }
+    const line = executionState.rawLines[executionState.currentLine].trim();
+    const { container, arrow } = executionState.lineElements[executionState.currentLine];
 
-    let i = 0;
-    const stack = [];
-    while (i < rawLines.length) {
-      const line = rawLines[i].trim();
-      const { container, arrow } = lineElements[i];
+    // Highlight current line
+    executionState.lineElements.forEach(el => {
+      el.container.classList.remove('highlight');
+      el.arrow.classList.remove('active');
+    });
+    container.classList.add('highlight');
+    arrow.classList.add('active');
 
-      lineElements.forEach(el => {
-        el.container.classList.remove('highlight');
-        el.arrow.classList.remove('active');
-      });
-      container.classList.add('highlight');
-      arrow.classList.add('active');
+    try {
+      if (line === '') {
+        document.getElementById('explanationBox').textContent = 'Skipping empty line.';
+        executionState.currentLine++;
+        return true;
+      }
 
-      await new Promise(resolve => setTimeout(resolve, 1300));
-
-      try {
-        if (line === '') {
-          explanationBox.textContent = 'Skipping empty line.';
-          i++;
-          continue;
+      if (/^SET\s+(\w+)\s+TO\s+(.+)$/i.test(line)) {
+        const [, varName, valueRaw] = line.match(/^SET\s+(\w+)\s+TO\s+(.+)$/i);
+        let val = valueRaw.trim();
+        if (/^".*"$/.test(val) && !/[+]/.test(val)) {
+          executionState.variables[varName] = val.slice(1, -1);
+        } else if (!isNaN(Number(val))) {
+          executionState.variables[varName] = Number(val);
+        } else {
+          executionState.variables[varName] = evalInScope(replaceVars(val), executionState.variables);
         }
+        document.getElementById('explanationBox').textContent = `Set ${varName} to ${executionState.variables[varName]}`;
+        executionState.currentLine++;
+      }
 
-        if (/^SET\s+(\w+)\s+TO\s+(.+)$/i.test(line)) {
-          const [, varName, valueRaw] = line.match(/^SET\s+(\w+)\s+TO\s+(.+)$/i);
-          let val = valueRaw.trim();
-          if (/^".*"$/.test(val) && !/[+]/.test(val)) {
-            variables[varName] = val.slice(1, -1);
-          } else if (!isNaN(Number(val))) {
-            variables[varName] = Number(val);
-          } else {
-            variables[varName] = evalInScope(replaceVars(val), variables);
-          }
-          explanationBox.textContent = `Set ${varName} to ${variables[varName]}`;
-          i++;
-        }
+      else if (/^OUTPUT\s+(.+)$/i.test(line)) {
+        const expr = line.match(/^OUTPUT\s+(.+)$/i)[1];
+        let val = evalInScope(replaceVars(expr), executionState.variables);
+        executionState.output += val + '\n';
+        document.getElementById('outputBox').textContent = executionState.output;
+        document.getElementById('explanationBox').textContent = `Outputting: ${val}`;
+        executionState.currentLine++;
+      }
 
-        else if (/^OUTPUT\s+(.+)$/i.test(line)) {
-          const expr = line.match(/^OUTPUT\s+(.+)$/i)[1];
-          let val = evalInScope(replaceVars(expr), variables);
-          output += val + '\n';
-          outputBox.textContent = output;
-          explanationBox.textContent = `Outputting: ${val}`;
-          i++;
-        }
-
-        
       // IF
       else if (/^IF\s+(.+)\s+THEN$/i.test(line)) {
         const condition = line.match(/^IF\s+(.+)\s+THEN$/i)[1];
-        const result = evalInScope(replaceVars(condition), variables);
+        const result = evalInScope(replaceVars(condition), executionState.variables);
         let elseIndex = -1;
         let endIfIndex = -1;
         let depth = 0;
 
-        for (let j = i + 1; j < rawLines.length; j++) {
-          const checkLine = rawLines[j].trim();
+        for (let j = executionState.currentLine + 1; j < executionState.rawLines.length; j++) {
+          const checkLine = executionState.rawLines[j].trim();
           if (/^IF\s+(.+)\s+THEN$/i.test(checkLine)) depth++;
           else if (/^END IF$/i.test(checkLine)) {
             if (depth === 0) {
@@ -358,39 +387,40 @@ OUTPUT x"></textarea>
         }
 
         if (endIfIndex === -1) {
-          explanationBox.textContent = "Error: Missing END IF.";
-          break;
+          document.getElementById('explanationBox').textContent = "Error: Missing END IF.";
+          executionState.isRunning = false;
+          return false;
         }
 
         if (result) {
-          explanationBox.textContent = "Condition is TRUE. Executing IF block.";
-          stack.push({ type: 'IF', endIf: endIfIndex });
-          i++;
+          document.getElementById('explanationBox').textContent = "Condition is TRUE. Executing IF block.";
+          executionState.stack.push({ type: 'IF', endIf: endIfIndex });
+          executionState.currentLine++;
         } else {
-          explanationBox.textContent = "Condition is FALSE. Skipping IF block.";
-          i = elseIndex !== -1 ? elseIndex + 1 : endIfIndex + 1;
+          document.getElementById('explanationBox').textContent = "Condition is FALSE. Skipping IF block.";
+          executionState.currentLine = elseIndex !== -1 ? elseIndex + 1 : endIfIndex + 1;
         }
-        continue;
+        return true;
       }
 
       // ELSE
       else if (/^ELSE$/i.test(line)) {
-        const last = stack[stack.length - 1];
+        const last = executionState.stack[executionState.stack.length - 1];
         if (last?.type === 'IF') {
-          i = last.endIf + 1;
-          stack.pop();
+          executionState.currentLine = last.endIf + 1;
+          executionState.stack.pop();
         } else {
-          i++;
+          executionState.currentLine++;
         }
-        continue;
+        return true;
       }
 
       // END IF
       else if (/^END IF$/i.test(line)) {
-        const last = stack[stack.length - 1];
-        if (last?.type === 'IF') stack.pop();
-        i++;
-        continue;
+        const last = executionState.stack[executionState.stack.length - 1];
+        if (last?.type === 'IF') executionState.stack.pop();
+        executionState.currentLine++;
+        return true;
       }
 
       // FOR loop
@@ -400,95 +430,141 @@ OUTPUT x"></textarea>
 
         if (start > end) {
           let depth = 0;
-          for (let j = i + 1; j < rawLines.length; j++) {
-            const checkLine = rawLines[j].trim();
+          for (let j = executionState.currentLine + 1; j < executionState.rawLines.length; j++) {
+            const checkLine = executionState.rawLines[j].trim();
             if (/^FOR\s+(\w+)\s+FROM\s+(\d+)\s+TO\s+(\d+)$/i.test(checkLine)) depth++;
             else if (/^END FOR$/i.test(checkLine)) {
               if (depth === 0) {
-                explanationBox.textContent = `Skipping FOR loop (start > end).`;
-                i = j + 1;
+                document.getElementById('explanationBox').textContent = `Skipping FOR loop (start > end).`;
+                executionState.currentLine = j + 1;
                 break;
               } else depth--;
             }
           }
-          continue;
+          return true;
         }
 
-        variables[varName] = start;
-        stack.push({ type: 'FOR', line: i, varName, end });
-        explanationBox.textContent = `Starting FOR loop: ${varName} from ${start} to ${end}`;
-        i++;
+        executionState.variables[varName] = start;
+        executionState.stack.push({ type: 'FOR', line: executionState.currentLine, varName, end });
+        document.getElementById('explanationBox').textContent = `Starting FOR loop: ${varName} from ${start} to ${end}`;
+        executionState.currentLine++;
+        return true;
       }
 
       // END FOR
       else if (/^END FOR$/i.test(line)) {
-        const loop = stack.pop();
-        if (variables[loop.varName] < loop.end) {
-          variables[loop.varName]++;
-          explanationBox.textContent = `Incrementing ${loop.varName} to ${variables[loop.varName]}`;
-          stack.push(loop);
-          i = loop.line + 1;
+        const loop = executionState.stack.pop();
+        if (executionState.variables[loop.varName] < loop.end) {
+          executionState.variables[loop.varName]++;
+          document.getElementById('explanationBox').textContent = `Incrementing ${loop.varName} to ${executionState.variables[loop.varName]}`;
+          executionState.stack.push(loop);
+          executionState.currentLine = loop.line + 1;
         } else {
-          explanationBox.textContent = `Exiting FOR loop.`;
-          i++;
+          document.getElementById('explanationBox').textContent = `Exiting FOR loop.`;
+          executionState.currentLine++;
         }
+        return true;
       }
 
       // WHILE loop
       else if (/^WHILE\s+(.+)$/i.test(line)) {
         const condition = line.match(/^WHILE\s+(.+)$/i)[1];
-        const result = evalInScope(replaceVars(condition), variables);
+        const result = evalInScope(replaceVars(condition), executionState.variables);
 
         if (!result) {
           let depth = 0;
-          for (let j = i + 1; j < rawLines.length; j++) {
-            const checkLine = rawLines[j].trim();
+          for (let j = executionState.currentLine + 1; j < executionState.rawLines.length; j++) {
+            const checkLine = executionState.rawLines[j].trim();
             if (/^WHILE\s+(.+)$/i.test(checkLine)) depth++;
             else if (/^END WHILE$/i.test(checkLine)) {
               if (depth === 0) {
-                explanationBox.textContent = `Skipping WHILE loop.`;
-                i = j + 1;
+                document.getElementById('explanationBox').textContent = `Skipping WHILE loop.`;
+                executionState.currentLine = j + 1;
                 break;
               } else depth--;
             }
           }
-          continue;
+          return true;
         }
 
-        stack.push({ type: 'WHILE', line: i, condition });
-        explanationBox.textContent = `Entering WHILE loop.`;
-        i++;
+        executionState.stack.push({ type: 'WHILE', line: executionState.currentLine, condition });
+        document.getElementById('explanationBox').textContent = `Entering WHILE loop.`;
+        executionState.currentLine++;
+        return true;
       }
 
       // END WHILE
       else if (/^END WHILE$/i.test(line)) {
-  const loop = stack[stack.length - 1]; // peek, don't pop yet
-  const result = evalInScope(replaceVars(loop.condition), variables);
+        const loop = executionState.stack[executionState.stack.length - 1];
+        const result = evalInScope(replaceVars(loop.condition), executionState.variables);
 
-  if (result) {
-    explanationBox.textContent = `Repeating WHILE loop.`;
-    i = loop.line + 1; // back to the first line inside the WHILE
-  } else {
-    explanationBox.textContent = `Exiting WHILE loop.`;
-    stack.pop(); // only pop now
-    i++;
-  }
-}
-
+        if (result) {
+          document.getElementById('explanationBox').textContent = `Repeating WHILE loop.`;
+          executionState.currentLine = loop.line + 1;
+        } else {
+          document.getElementById('explanationBox').textContent = `Exiting WHILE loop.`;
+          executionState.stack.pop();
+          executionState.currentLine++;
+        }
+        return true;
+      }
 
       // Unknown
       else {
-        explanationBox.textContent = `Unknown command: ${line}`;
-        i++;
+        document.getElementById('explanationBox').textContent = `Unknown command: ${line}`;
+        executionState.currentLine++;
+        return true;
       }
     } catch (err) {
-      explanationBox.textContent = `Error: ${err}`;
-      break;
+      document.getElementById('explanationBox').textContent = `Error: ${err}`;
+      executionState.isRunning = false;
+      if (executionState.autoRunInterval) {
+        clearInterval(executionState.autoRunInterval);
+        executionState.autoRunInterval = null;
+      }
+      return false;
     }
+    
+    return true;
   }
 
-  explanationBox.textContent += '\n\nExecution complete.';
-}
+  function runAuto() {
+    if (executionState.isRunning) {
+      // If already running, stop the automatic execution
+      if (executionState.autoRunInterval) {
+        clearInterval(executionState.autoRunInterval);
+        executionState.autoRunInterval = null;
+      }
+      executionState.isRunning = false;
+      document.getElementById('autoRunBtn').textContent = 'Run Automatically';
+      return;
+    }
+    
+    prepareExecution();
+    document.getElementById('autoRunBtn').textContent = 'Stop Execution';
+    
+    executionState.autoRunInterval = setInterval(() => {
+      const shouldContinue = executeNextStep();
+      if (!shouldContinue) {
+        clearInterval(executionState.autoRunInterval);
+        executionState.autoRunInterval = null;
+        document.getElementById('autoRunBtn').textContent = 'Run Automatically';
+      }
+    }, 1300);
+  }
+
+  function runStep() {
+    if (!executionState.isRunning) {
+      prepareExecution();
+    }
+    
+    if (executionState.currentLine < executionState.rawLines.length) {
+      executeNextStep();
+    } else {
+      document.getElementById('explanationBox').textContent += '\n\nExecution complete.';
+      executionState.isRunning = false;
+    }
+  }
 </script>
   <div style="text-align:center; margin-top:40px; color:#ffffff; font-size:60px;">
     &copy; 2025 Nova-tech. All rights reserved.
