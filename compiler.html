@@ -246,7 +246,8 @@ h1:hover {
     <h1>Pseudocode Compiler</h1>
 <label for="codeInput"><strong>Enter your pseudocode:</strong></label>
     <textarea id="codeInput" placeholder="Example:
-SET x TO 5
+Declare x : INTEGER   
+ x <- 5
 OUTPUT x"></textarea>
 <div class="btn-group">
   <button id="autoRunBtn" onclick="runAuto()">Run Automatically</button>
@@ -258,314 +259,547 @@ OUTPUT x"></textarea>
 <div class="code-output" id="outputBox"></div>
 <div class="explanation" id="explanationBox"></div>
 
-  <script>
-  // Global variables to manage execution
-  let executionState = {
-    lineElements: [],
-    variables: {},
-    output: '',
-    currentLine: 0,
-    stack: [],
-    isRunning: false,
-    autoRunInterval: null,
-    rawLines: []
-  };
+ <script>
+        let executionState = {
+            lineElements: [],
+            variables: {},
+            output: '',
+            currentLine: 0,
+            stack: [],
+            isRunning: false,
+            autoRunInterval: null,
+            rawLines: []
+        };
 
-  function prepareExecution() {
-    const codeArea = document.getElementById('codeInput');
-    const rawLines = codeArea.value.trim().split('\n');
-    const codeDisplay = document.getElementById('codeDisplay');
+function getBlockEnd(startLine) {
+    const startLineText = executionState.rawLines[startLine];
+    const startIndent = startLineText.search(/\S/);
+    let depth = 0;
     
-    codeDisplay.innerHTML = '';
-    document.getElementById('outputBox').textContent = '';
-    document.getElementById('explanationBox').textContent = 'Starting execution...';
-
-    executionState = {
-      lineElements: [],
-      variables: {},
-      output: '',
-      currentLine: 0,
-      stack: [],
-      isRunning: true,
-      autoRunInterval: null,
-      rawLines: rawLines
-    };
-
-    executionState.lineElements = rawLines.map((line) => {
-      const div = document.createElement('div');
-      div.className = 'code-line';
-      const arrow = document.createElement('span');
-      arrow.className = 'arrow';
-      div.appendChild(arrow);
-      const text = document.createElement('span');
-      text.textContent = line;
-      div.appendChild(text);
-      codeDisplay.appendChild(div);
-      return { container: div, arrow, text };
-    });
-  }
-
-  function replaceVars(expr) {
-    return expr;
-  }
-
-  function evalInScope(expr, variables) {
-    return Function(...Object.keys(variables), `return (${expr});`)(...Object.values(variables));
-  }
-
-  function executeNextStep() {
-    if (executionState.currentLine >= executionState.rawLines.length) {
-      executionState.isRunning = false;
-      document.getElementById('explanationBox').textContent += '\n\nExecution complete.';
-      if (executionState.autoRunInterval) {
-        clearInterval(executionState.autoRunInterval);
-        executionState.autoRunInterval = null;
-      }
-      return false;
-    }
-
-    const line = executionState.rawLines[executionState.currentLine].trim();
-    const { container, arrow } = executionState.lineElements[executionState.currentLine];
-
-    // Highlight current line
-    executionState.lineElements.forEach(el => {
-      el.container.classList.remove('highlight');
-      el.arrow.classList.remove('active');
-    });
-    container.classList.add('highlight');
-    arrow.classList.add('active');
-
-    try {
-      if (line === '') {
-        document.getElementById('explanationBox').textContent = 'Skipping empty line.';
-        executionState.currentLine++;
-        return true;
-      }
-
-      if (/^SET\s+(\w+)\s+TO\s+(.+)$/i.test(line)) {
-        const [, varName, valueRaw] = line.match(/^SET\s+(\w+)\s+TO\s+(.+)$/i);
-        let val = valueRaw.trim();
-        if (/^".*"$/.test(val) && !/[+]/.test(val)) {
-          executionState.variables[varName] = val.slice(1, -1);
-        } else if (!isNaN(Number(val))) {
-          executionState.variables[varName] = Number(val);
-        } else {
-          executionState.variables[varName] = evalInScope(replaceVars(val), executionState.variables);
+    for (let i = startLine + 1; i < executionState.rawLines.length; i++) {
+        const currentLine = executionState.rawLines[i];
+        const currentIndent = currentLine.search(/\S/);
+        
+        if (currentIndent === -1) continue; // Skip empty lines
+        
+        // Check for block starters
+        if (/^\s*(IF|FOR|WHILE|REPEAT)\b/i.test(currentLine)) {
+            depth++;
+            continue;
         }
-        document.getElementById('explanationBox').textContent = `Set ${varName} to ${executionState.variables[varName]}`;
-        executionState.currentLine++;
-      }
+        
+        // Check for block terminators
+        if (/^\s*(END IF|NEXT|ENDWHILE|UNTIL)\b/i.test(currentLine)) {
+            if (depth > 0) {
+                depth--;
+                continue;
+            }
+            // Special case: END IF must match IF indentation
+            if (/^\s*END IF\b/i.test(currentLine)) {
+                const endIfIndent = currentLine.search(/\S/);
+                if (endIfIndent !== startIndent) {
+                    continue; // Keep searching for properly indented END IF
+                }
+            }
+            return i;
+        }
+        
+        // Base case for same-level termination
+        if (currentIndent <= startIndent && depth === 0) {
+            return i;
+        }
+    }
+    return executionState.rawLines.length;
+}
 
-      else if (/^OUTPUT\s+(.+)$/i.test(line)) {
-        const expr = line.match(/^OUTPUT\s+(.+)$/i)[1];
-        let val = evalInScope(replaceVars(expr), executionState.variables);
-        executionState.output += val + '\n';
-        document.getElementById('outputBox').textContent = executionState.output;
-        document.getElementById('explanationBox').textContent = `Outputting: ${val}`;
-        executionState.currentLine++;
-      }
+        function prepareExecution() {
+            const codeArea = document.getElementById('codeInput');
+            const rawLines = codeArea.value.split('\n');
+            const codeDisplay = document.getElementById('codeDisplay');
 
-      // IF
-      else if (/^IF\s+(.+)\s+THEN$/i.test(line)) {
-        const condition = line.match(/^IF\s+(.+)\s+THEN$/i)[1];
-        const result = evalInScope(replaceVars(condition), executionState.variables);
-        let elseIndex = -1;
-        let endIfIndex = -1;
-        let depth = 0;
+            codeDisplay.innerHTML = '';
+            document.getElementById('outputBox').textContent = '';
+            document.getElementById('explanationBox').textContent = 'Starting execution...';
 
-        for (let j = executionState.currentLine + 1; j < executionState.rawLines.length; j++) {
-          const checkLine = executionState.rawLines[j].trim();
-          if (/^IF\s+(.+)\s+THEN$/i.test(checkLine)) depth++;
-          else if (/^END IF$/i.test(checkLine)) {
-            if (depth === 0) {
-              endIfIndex = j;
-              break;
-            } else depth--;
-          } else if (/^ELSE$/i.test(checkLine) && depth === 0) {
+            executionState = {
+                lineElements: [],
+                variables: {},
+                output: '',
+                currentLine: 0,
+                stack: [],
+                isRunning: true,
+                autoRunInterval: null,
+                rawLines
+            };
+
+            executionState.lineElements = rawLines.map((line, index) => {
+                const div = document.createElement('div');
+                div.className = 'code-line';
+                div.dataset.line = index;
+                
+                const arrow = document.createElement('span');
+                arrow.className = 'arrow';
+                div.appendChild(arrow);
+                
+                const text = document.createElement('span');
+                text.textContent = line;
+                div.appendChild(text);
+                
+                codeDisplay.appendChild(div);
+                return { container: div, arrow, text };
+            });
+        }
+
+        function escapeString(str) {
+            return str.replace(/"/g, '\\"');
+        }
+
+        function replaceVars(expr) {
+            let logicalExpr = expr
+                .replace(/\bAND\b/gi, '&&')
+                .replace(/\bOR\b/gi, '||')
+                .replace(/\bNOT\b/gi, '!')
+                .replace(/\bTRUE\b/gi, 'true')
+                .replace(/\bFALSE\b/gi, 'false')
+                .replace(/\bMOD\b/gi, '%')
+                .replace(/([^<>!])=([^=])/g, '$1===$2')
+                .replace(/<>/g, '!==')
+                .replace(/<=/g, '<=')
+                .replace(/>=/g, '>=');
+
+            return logicalExpr.replace(/\b[a-zA-Z_]\w*\b/g, word => {
+                if (executionState.variables.hasOwnProperty(word)) {
+                    const value = executionState.variables[word];
+                    if (typeof value === 'string') {
+                        return `"${escapeString(value)}"`;
+                    }
+                    return value;
+                }
+                return word;
+            });
+        }
+
+        function evalInScope(expr, variables) {
+            try {
+                const varNames = Object.keys(variables);
+                const varValues = varNames.map(name => variables[name]);
+                
+                if (/^".*"$/.test(expr.trim())) {
+                    return expr.trim().slice(1, -1);
+                }
+                
+                if (!isNaN(expr)) {
+                    return parseFloat(expr);
+                }
+                
+                return Function(...varNames, `return (${expr})`)(...varValues);
+            } catch (err) {
+                console.error(`Error evaluating: ${expr}`, err);
+                throw new Error(`Evaluation error in expression: ${expr} - ${err.message}`);
+            }
+        }
+
+        function executeNextStep() {
+            if (executionState.currentLine >= executionState.rawLines.length) {
+                executionState.isRunning = false;
+                document.getElementById('explanationBox').textContent += '\n\nExecution complete.';
+                clearInterval(executionState.autoRunInterval || 0);
+                document.getElementById('autoRunBtn').textContent = 'Run Automatically';
+                return false;
+            }
+
+            const rawLine = executionState.rawLines[executionState.currentLine];
+            const line = rawLine.trim();
+            const { container, arrow } = executionState.lineElements[executionState.currentLine];
+
+            executionState.lineElements.forEach(el => {
+                el.container.classList.remove('highlight');
+                el.arrow.classList.remove('active');
+            });
+            
+            container.classList.add('highlight');
+            arrow.classList.add('active');
+            
+            try {
+                const exBox = document.getElementById('explanationBox');
+                if (line === '') {
+                    exBox.textContent = 'Skipping empty line.';
+                    executionState.currentLine++;
+                    return true;
+                }
+
+                // DECLARE
+                if (/^DECLARE\s+(.+)\s*:\s*(INTEGER|REAL|STRING)$/i.test(line)) {
+                    const [, varList, type] = line.match(/^DECLARE\s+(.+)\s*:\s*(INTEGER|REAL|STRING)$/i);
+                    const vars = varList.split(',').map(v => v.trim());
+                    vars.forEach(v => {
+                        executionState.variables[v] = type === 'STRING' ? "" : 0;
+                    });
+                    exBox.textContent = `Declared ${vars.join(', ')} as ${type}`;
+                    executionState.currentLine++;
+                    return true;
+                }
+
+                // Assignment
+                if (/^(\w+)\s*<-\s*(.+)$/i.test(line)) {
+                    const [, varName, valueRaw] = line.match(/^(\w+)\s*<-\s*(.+)$/i);
+                    const val = valueRaw.trim();
+                    
+                    if (/^".*"$/.test(val)) {
+                        executionState.variables[varName] = val.slice(1, -1);
+                    } else {
+                        try {
+                            executionState.variables[varName] = evalInScope(replaceVars(val), executionState.variables);
+                        } catch (e) {
+                            if (executionState.variables.hasOwnProperty(val)) {
+                                executionState.variables[varName] = executionState.variables[val];
+                            } else {
+                                throw e;
+                            }
+                        }
+                    }
+                    exBox.textContent = `Assigned ${varName} = ${executionState.variables[varName]}`;
+                    executionState.currentLine++;
+                    return true;
+                }
+
+                // INPUT
+                if (/^INPUT\s+(.+)$/i.test(line)) {
+                    const varList = line.match(/^INPUT\s+(.+)$/i)[1].split(',').map(v => v.trim());
+                    for (let v of varList) {
+                        let val = prompt(`Enter value for ${v}:`);
+                        if (val === null) {
+                            exBox.textContent = "Execution canceled by user";
+                            stopExecution();
+                            return false;
+                        }
+                        executionState.variables[v] = isNaN(val) ? val : Number(val);
+                    }
+                    exBox.textContent = `Input received for: ${varList.join(', ')}`;
+                    executionState.currentLine++;
+                    return true;
+                }
+
+                // OUTPUT
+                if (/^OUTPUT\s+(.+)$/i.test(line)) {
+                    const expressions = line.match(/^OUTPUT\s+(.+)$/i)[1].split(',').map(e => e.trim());
+                    const values = expressions.map(e => {
+                        if (/^".*"$/.test(e)) {
+                            return e.slice(1, -1);
+                        }
+                        try {
+                            return evalInScope(replaceVars(e), executionState.variables);
+                        } catch (err) {
+                            return e;
+                        }
+                    });
+                    const combined = values.join(' ');
+                    executionState.output += combined + '\n';
+                    document.getElementById('outputBox').textContent = executionState.output;
+                    exBox.textContent = `Outputting: ${combined}`;
+                    executionState.currentLine++;
+                    return true;
+                }
+// IF handler
+if (/^IF\s+(.+)\s+THEN$/i.test(line)) {
+    const condition = line.match(/^IF\s+(.+)\s+THEN$/i)[1];
+    const jsCondition = replaceVars(condition);
+    const result = evalInScope(jsCondition, executionState.variables);
+    
+    // Find the matching END IF at the same indentation level
+    const currentIndent = executionState.rawLines[executionState.currentLine].search(/\S/);
+    let endIfIndex = -1;
+    let elseIndex = -1;
+    
+    for (let j = executionState.currentLine + 1; j < executionState.rawLines.length; j++) {
+        const lineText = executionState.rawLines[j];
+        const lineIndent = lineText.search(/\S/);
+        
+        if (lineIndent === -1) continue;
+        
+        if (/^\s*END IF\s*$/i.test(lineText) && lineIndent === currentIndent) {
+            endIfIndex = j;
+            break;
+        }
+        
+        if (/^\s*ELSE\s*$/i.test(lineText) && lineIndent === currentIndent) {
             elseIndex = j;
-          }
         }
-
-        if (endIfIndex === -1) {
-          document.getElementById('explanationBox').textContent = "Error: Missing END IF.";
-          executionState.isRunning = false;
-          return false;
-        }
-
-        if (result) {
-          document.getElementById('explanationBox').textContent = "Condition is TRUE. Executing IF block.";
-          executionState.stack.push({ type: 'IF', endIf: endIfIndex });
-          executionState.currentLine++;
-        } else {
-          document.getElementById('explanationBox').textContent = "Condition is FALSE. Skipping IF block.";
-          executionState.currentLine = elseIndex !== -1 ? elseIndex + 1 : endIfIndex + 1;
-        }
-        return true;
-      }
-
-      // ELSE
-      else if (/^ELSE$/i.test(line)) {
-        const last = executionState.stack[executionState.stack.length - 1];
-        if (last?.type === 'IF') {
-          executionState.currentLine = last.endIf + 1;
-          executionState.stack.pop();
-        } else {
-          executionState.currentLine++;
-        }
-        return true;
-      }
-
-      // END IF
-      else if (/^END IF$/i.test(line)) {
-        const last = executionState.stack[executionState.stack.length - 1];
-        if (last?.type === 'IF') executionState.stack.pop();
-        executionState.currentLine++;
-        return true;
-      }
-
-      // FOR loop
-      else if (/^FOR\s+(\w+)\s+FROM\s+(\d+)\s+TO\s+(\d+)$/i.test(line)) {
-        const [, varName, startStr, endStr] = line.match(/^FOR\s+(\w+)\s+FROM\s+(\d+)\s+TO\s+(\d+)$/i);
-        const start = Number(startStr), end = Number(endStr);
-
-        if (start > end) {
-          let depth = 0;
-          for (let j = executionState.currentLine + 1; j < executionState.rawLines.length; j++) {
-            const checkLine = executionState.rawLines[j].trim();
-            if (/^FOR\s+(\w+)\s+FROM\s+(\d+)\s+TO\s+(\d+)$/i.test(checkLine)) depth++;
-            else if (/^END FOR$/i.test(checkLine)) {
-              if (depth === 0) {
-                document.getElementById('explanationBox').textContent = `Skipping FOR loop (start > end).`;
-                executionState.currentLine = j + 1;
-                break;
-              } else depth--;
-            }
-          }
-          return true;
-        }
-
-        executionState.variables[varName] = start;
-        executionState.stack.push({ type: 'FOR', line: executionState.currentLine, varName, end });
-        document.getElementById('explanationBox').textContent = `Starting FOR loop: ${varName} from ${start} to ${end}`;
-        executionState.currentLine++;
-        return true;
-      }
-
-      // END FOR
-      else if (/^END FOR$/i.test(line)) {
-        const loop = executionState.stack.pop();
-        if (executionState.variables[loop.varName] < loop.end) {
-          executionState.variables[loop.varName]++;
-          document.getElementById('explanationBox').textContent = `Incrementing ${loop.varName} to ${executionState.variables[loop.varName]}`;
-          executionState.stack.push(loop);
-          executionState.currentLine = loop.line + 1;
-        } else {
-          document.getElementById('explanationBox').textContent = `Exiting FOR loop.`;
-          executionState.currentLine++;
-        }
-        return true;
-      }
-
-      // WHILE loop
-      else if (/^WHILE\s+(.+)$/i.test(line)) {
-        const condition = line.match(/^WHILE\s+(.+)$/i)[1];
-        const result = evalInScope(replaceVars(condition), executionState.variables);
-
-        if (!result) {
-          let depth = 0;
-          for (let j = executionState.currentLine + 1; j < executionState.rawLines.length; j++) {
-            const checkLine = executionState.rawLines[j].trim();
-            if (/^WHILE\s+(.+)$/i.test(checkLine)) depth++;
-            else if (/^END WHILE$/i.test(checkLine)) {
-              if (depth === 0) {
-                document.getElementById('explanationBox').textContent = `Skipping WHILE loop.`;
-                executionState.currentLine = j + 1;
-                break;
-              } else depth--;
-            }
-          }
-          return true;
-        }
-
-        executionState.stack.push({ type: 'WHILE', line: executionState.currentLine, condition });
-        document.getElementById('explanationBox').textContent = `Entering WHILE loop.`;
-        executionState.currentLine++;
-        return true;
-      }
-
-      // END WHILE
-      else if (/^END WHILE$/i.test(line)) {
-        const loop = executionState.stack[executionState.stack.length - 1];
-        const result = evalInScope(replaceVars(loop.condition), executionState.variables);
-
-        if (result) {
-          document.getElementById('explanationBox').textContent = `Repeating WHILE loop.`;
-          executionState.currentLine = loop.line + 1;
-        } else {
-          document.getElementById('explanationBox').textContent = `Exiting WHILE loop.`;
-          executionState.stack.pop();
-          executionState.currentLine++;
-        }
-        return true;
-      }
-
-      // Unknown
-      else {
-        document.getElementById('explanationBox').textContent = `Unknown command: ${line}`;
-        executionState.currentLine++;
-        return true;
-      }
-    } catch (err) {
-      document.getElementById('explanationBox').textContent = `Error: ${err}`;
-      executionState.isRunning = false;
-      if (executionState.autoRunInterval) {
-        clearInterval(executionState.autoRunInterval);
-        executionState.autoRunInterval = null;
-      }
-      return false;
     }
     
-    return true;
-  }
-
-  function runAuto() {
-    if (executionState.isRunning) {
-      // If already running, stop the automatic execution
-      if (executionState.autoRunInterval) {
-        clearInterval(executionState.autoRunInterval);
-        executionState.autoRunInterval = null;
-      }
-      executionState.isRunning = false;
-      document.getElementById('autoRunBtn').textContent = 'Run Automatically';
-      return;
+    if (endIfIndex === -1) {
+        exBox.textContent = "Error: Missing END IF";
+        executionState.isRunning = false;
+        return false;
     }
-    
-    prepareExecution();
-    document.getElementById('autoRunBtn').textContent = 'Stop Execution';
-    
-    executionState.autoRunInterval = setInterval(() => {
-      const shouldContinue = executeNextStep();
-      if (!shouldContinue) {
-        clearInterval(executionState.autoRunInterval);
-        executionState.autoRunInterval = null;
-        document.getElementById('autoRunBtn').textContent = 'Run Automatically';
-      }
-    }, 2000);
-  }
 
-  function runStep() {
-    if (!executionState.isRunning) {
-      prepareExecution();
-    }
-    
-    if (executionState.currentLine < executionState.rawLines.length) {
-      executeNextStep();
+    executionState.stack.push({ 
+        type: 'IF', 
+        startLine: executionState.currentLine,
+        endLine: endIfIndex,
+        elseLine: elseIndex !== -1 ? elseIndex : null,
+        executed: result
+    });
+
+    if (result) {
+        exBox.textContent = "IF condition TRUE, executing block.";
+        executionState.currentLine++;
     } else {
-      document.getElementById('explanationBox').textContent += '\n\nExecution complete.';
-      executionState.isRunning = false;
+        executionState.currentLine = elseIndex !== -1 ? elseIndex + 1 : endIfIndex + 1;
+        exBox.textContent = "IF condition FALSE, skipping block.";
     }
-  }
-</script>
+    return true;
+}
+
+// ELSE handler
+if (/^ELSE$/i.test(line)) {
+    const ifBlock = executionState.stack[executionState.stack.length - 1];
+    if (!ifBlock || ifBlock.type !== 'IF') {
+        exBox.textContent = "Error: ELSE without matching IF";
+        executionState.isRunning = false;
+        return false;
+    }
+    
+    // Jump to END IF
+    executionState.currentLine = ifBlock.endLine + 1;
+    return true;
+}
+
+// END IF handler
+if (/^END IF$/i.test(line)) {
+    const ifBlock = executionState.stack.pop();
+    if (!ifBlock || ifBlock.type !== 'IF') {
+        exBox.textContent = "Error: END IF without matching IF";
+        executionState.isRunning = false;
+        return false;
+    }
+    executionState.currentLine++;
+    return true;
+}
+
+                // FOR loop - FIXED
+if (/^FOR\s+(\w+)\s*<-\s*(\w+|\d+)\s+TO\s+(\w+|\d+)(?:\s+DO)?$/i.test(line)) {
+    const [, varName, startStr, endStr] = line.match(/^FOR\s+(\w+)\s*<-\s*(\w+|\d+)\s+TO\s+(\w+|\d+)(?:\s+DO)?$/i);
+
+    const start = isNaN(startStr) ? 
+        (executionState.variables.hasOwnProperty(startStr) ? executionState.variables[startStr] : parseInt(startStr)) : 
+        parseInt(startStr);
+
+    const end = isNaN(endStr) ? 
+        (executionState.variables.hasOwnProperty(endStr) ? executionState.variables[endStr] : parseInt(endStr)) : 
+        parseInt(endStr);
+
+    executionState.variables[varName] = start;
+
+    executionState.stack.push({
+        type: 'FOR',
+        line: executionState.currentLine,
+        varName: varName,
+        end: end
+    });
+
+    exBox.textContent = `FOR loop started: ${varName} from ${start} to ${end}`;
+    executionState.currentLine++;
+    return true;
+}
+
+
+
+if (/^NEXT$/i.test(line)) {
+    // Find the last FOR in the stack (top-most unmatched FOR)
+    for (let i = executionState.stack.length - 1; i >= 0; i--) {
+        const loop = executionState.stack[i];
+        if (loop.type === 'FOR') {
+            const varName = loop.varName;
+            executionState.variables[varName]++;
+
+            if (executionState.variables[varName] <= loop.end) {
+                executionState.currentLine = loop.line + 1;
+                exBox.textContent = `Looping again FOR ${varName} = ${executionState.variables[varName]}`;
+            } else {
+                executionState.stack.splice(i, 1);  // Remove this FOR loop
+                executionState.currentLine++;
+                exBox.textContent = `Exiting FOR loop (${varName})`;
+            }
+            return true;
+        }
+    }
+
+    exBox.textContent = "Error: NEXT without matching FOR";
+    executionState.isRunning = false;
+    return false;
+}
+
+
+
+
+                // WHILE
+                if (/^WHILE\s+(.+)\s+DO$/i.test(line)) {
+                    const condition = line.match(/^WHILE\s+(.+)\s+DO$/i)[1];
+                    const result = evalInScope(replaceVars(condition), executionState.variables);
+                    
+                    if (!result) {
+                        let depth = 0;
+                        for (let j = executionState.currentLine + 1; j < executionState.rawLines.length; j++) {
+                            const checkLine = executionState.rawLines[j].trim();
+                            if (/^WHILE\s+.+\s+DO$/i.test(checkLine)) depth++;
+                            else if (/^ENDWHILE$/i.test(checkLine)) {
+                                if (depth === 0) {
+                                    executionState.currentLine = j + 1;
+                                    exBox.textContent = `Skipping WHILE loop.`;
+                                    return true;
+                                } else {
+                                    depth--;
+                                }
+                            }
+                        }
+                    }
+                    
+                    executionState.stack.push({ 
+                        type: 'WHILE', 
+                        line: executionState.currentLine, 
+                        condition 
+                    });
+                    
+                    exBox.textContent = `Entering WHILE loop.`;
+                    executionState.currentLine++;
+                    return true;
+                }
+
+                // ENDWHILE
+                if (/^ENDWHILE$/i.test(line)) {
+                    const loopIndex = executionState.stack.findIndex(item => item.type === 'WHILE');
+                    if (loopIndex === -1) {
+                        exBox.textContent = "Error: ENDWHILE without matching WHILE";
+                        executionState.isRunning = false;
+                        return false;
+                    }
+                    
+                    const loop = executionState.stack[loopIndex];
+                    const result = evalInScope(replaceVars(loop.condition), executionState.variables);
+                    
+                    if (result) {
+                        executionState.currentLine = loop.line + 1;
+                        exBox.textContent = "Repeating WHILE loop.";
+                    } else {
+                        executionState.stack.splice(loopIndex, 1);
+                        executionState.currentLine++;
+                        exBox.textContent = "Exiting WHILE loop.";
+                    }
+                    return true;
+                }
+
+                // REPEAT
+                if (/^REPEAT$/i.test(line)) {
+                    executionState.stack.push({ 
+                        type: 'REPEAT', 
+                        line: executionState.currentLine 
+                    });
+                    exBox.textContent = "Entering REPEAT loop.";
+                    executionState.currentLine++;
+                    return true;
+                }
+
+                // UNTIL
+                if (/^UNTIL\s+(.+)$/i.test(line)) {
+                    const condition = line.match(/^UNTIL\s+(.+)$/i)[1];
+                    const result = evalInScope(replaceVars(condition), executionState.variables);
+                    
+                    const loopIndex = executionState.stack.findIndex(item => item.type === 'REPEAT');
+                    if (loopIndex === -1) {
+                        exBox.textContent = "Error: UNTIL without matching REPEAT";
+                        executionState.isRunning = false;
+                        return false;
+                    }
+                    
+                    if (result) {
+                        executionState.stack.splice(loopIndex, 1);
+                        executionState.currentLine++;
+                        exBox.textContent = "Exiting REPEAT loop.";
+                    } else {
+                        const loop = executionState.stack[loopIndex];
+                        executionState.currentLine = loop.line + 1;
+                        exBox.textContent = "Repeating REPEAT loop.";
+                    }
+                    return true;
+                }
+
+                exBox.textContent = `Unknown command: ${line}`;
+                executionState.currentLine++;
+                return true;
+
+            } catch (err) {
+                document.getElementById('explanationBox').textContent = `Error: ${err.message || err}`;
+                executionState.isRunning = false;
+                clearInterval(executionState.autoRunInterval || 0);
+                document.getElementById('autoRunBtn').textContent = 'Run Automatically';
+                return false;
+            }
+        }
+
+        function runAuto() {
+            if (executionState.isRunning) {
+                clearInterval(executionState.autoRunInterval || 0);
+                executionState.autoRunInterval = null;
+                executionState.isRunning = false;
+                document.getElementById('autoRunBtn').textContent = 'Run Automatically';
+                return;
+            }
+
+            prepareExecution();
+            document.getElementById('autoRunBtn').textContent = 'Stop Execution';
+
+            executionState.autoRunInterval = setInterval(() => {
+                const continueExecution = executeNextStep();
+                if (!continueExecution) {
+                    clearInterval(executionState.autoRunInterval);
+                    executionState.autoRunInterval = null;
+                    document.getElementById('autoRunBtn').textContent = 'Run Automatically';
+                }
+            }, 1500);
+        }
+
+        function runStep() {
+            if (!executionState.isRunning) {
+                prepareExecution();
+            }
+            if (executionState.currentLine < executionState.rawLines.length) {
+                executeNextStep();
+            } else {
+                document.getElementById('explanationBox').textContent += '\n\nExecution complete.';
+                executionState.isRunning = false;
+            }
+        }
+        
+        function stopExecution() {
+            if (executionState.autoRunInterval) {
+                clearInterval(executionState.autoRunInterval);
+                executionState.autoRunInterval = null;
+            }
+            executionState.isRunning = false;
+            document.getElementById('autoRunBtn').textContent = 'Run Automatically';
+            document.getElementById('explanationBox').textContent += '\n\nExecution stopped by user.';
+        }
+        
+        function resetCompiler() {
+            stopExecution();
+            document.getElementById('codeInput').value = '';
+            document.getElementById('codeDisplay').innerHTML = '';
+            document.getElementById('outputBox').textContent = '';
+            document.getElementById('explanationBox').textContent = 'Enter your pseudocode and click "Run Next Step" or "Run Automatically"';
+            executionState = {
+                lineElements: [],
+                variables: {},
+                output: '',
+                currentLine: 0,
+                stack: [],
+                isRunning: false,
+                autoRunInterval: null,
+                rawLines: []
+            };
+        }
+    </script>
+
   <div style="text-align:center; margin-top:40px; color:#ffffff; font-size:60px;">
     &copy; 2025 Nova-tech. All rights reserved.
   </div>
